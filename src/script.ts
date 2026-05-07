@@ -1,20 +1,25 @@
 
-function sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
+function sleep(ms: number) {
+    return new Promise<void>(resolve => setTimeout(resolve, ms));
 }
 
-function initializeGrid(height, width) {
-    let z = new Array(height).fill(null).map(el => new Array(width).fill(null));
-    return z;
+function initializeGrid<T>(height: number, width: number) {
+    let z = new Array(height).fill(null).map(() => new Array(width).fill(null));
+    return z as T[][];
 }
+
 class Cell {
-    constructor(isBomb, i, j) {
+    i: number;
+    j: number;
+    isBomb: boolean;
+    isFlagged = false;
+    isRevealed = false;
+    neighborBombs = 0;
+
+    constructor(isBomb: boolean, i: number, j: number) {
         this.i = i;
         this.j = j;
         this.isBomb = isBomb;
-        this.isFlagged = false;
-        this.isRevealed = false;
-        this.neighborBombs = 0;
     }
 
     reveal() {
@@ -29,14 +34,19 @@ class Cell {
     }
 }
 
+type GameStatus = 'playing' | 'won' | 'lost';
+
 class Grid {
-    constructor(sideLength) {
+    sideLength: number;
+    cellsTable: Cell[][];
+    status: GameStatus = "playing";
+    flaggedCount = 0;
+    bombsCount = 0;
+    revealedCount = 0;
+
+    constructor(sideLength: number) {
         this.sideLength = sideLength;
-        this.cellsTable = initializeGrid(this.sideLength, this.sideLength);
-        this.status = "playing";      // 'playing' | 'won' | 'lost'
-        this.flaggedCount = 0;
-        this.bombsCount = 0;
-        this.revealedCount = 0;
+        this.cellsTable = initializeGrid<Cell>(this.sideLength, this.sideLength);
         this.initiateGrid();
     }
     initiateGrid() {
@@ -44,20 +54,20 @@ class Grid {
             for (let j = 0; j < this.sideLength; j++) {
                 const isBomb = Math.random() < 0.1;   // todo: we should fix the number of bombs for each level
                 const crntCell = new Cell(isBomb, i, j);
-                this.bombsCount += isBomb;
+                this.bombsCount += isBomb ? 1 : 0;
                 this.cellsTable[i][j] = crntCell;
             }
         }
     }
 
-    toggleFlagCell(i, j) {
+    toggleFlagCell(i: number, j: number) {
         const currentCell = this.cellsTable[i][j];
         currentCell.toggleFlag();
         currentCell.isFlagged ? this.flaggedCount += 1 : this.flaggedCount -= 1;
         return [currentCell];
     }
 
-    revealCell(i, j) {
+    revealCell(i: number, j: number) {
         const currentCell = this.cellsTable[i][j];
         if (currentCell.isFlagged || currentCell.isRevealed) {
             return [];
@@ -66,7 +76,7 @@ class Grid {
             this.status = 'lost';
             return [];
         }
-        const updatedCells = [];
+        const updatedCells: Cell[] = [];
         this.floodFill(i, j, updatedCells);
         this.revealedCount += updatedCells.length;
         this.checkGameWin();
@@ -74,7 +84,7 @@ class Grid {
     }
 
     getBombsPositions() {
-        const cells = [];
+        const cells: Cell[] = [];
         for (const row of this.cellsTable) {
             for (const cell of row) {
                 if (cell.isBomb) {
@@ -85,7 +95,7 @@ class Grid {
         return cells;
     }
 
-    countSurroundingsBombs(i, j) {
+    countSurroundingsBombs(i: number, j: number) {
         let count = 0;
         let nextI, nextJ;
         for (let di = -1; di <= 1; di++) {
@@ -109,7 +119,7 @@ class Grid {
         }
     }
 
-    floodFill(i, j, updatedCells) {
+    floodFill(i: number, j: number, updatedCells: Cell[]) {
 
         if (i < 0 || i >= this.sideLength || j < 0 || j >= this.sideLength) {
             return;
@@ -139,48 +149,55 @@ class Grid {
     }
 }
 
+interface Stats {
+    remainingFlagsCount: number;
+}
+
 class GameView {
 
-    gridElement;
-    cellsElements;
-    rootElement;
+    gridElement!: HTMLElement;
+    cellsElements!: HTMLElement[][];
+    rootElement: HTMLElement;
 
-    constructor(rootElement) {
+    constructor(rootElement: HTMLElement) {
         this.rootElement = rootElement;
     }
 
-    buildGrid(sideLength) {
-        this.cellsElements = initializeGrid(sideLength, sideLength);
+    buildGrid(sideLength: number) {
+        this.cellsElements = initializeGrid<HTMLElement>(sideLength, sideLength);
         const gridElement = document.createElement('div');
         gridElement.classList.add('grid');
         for (let i = 0; i < sideLength; i++) {
             for (let j = 0; j < sideLength; j++) {
                 const cellElement = document.createElement('div');
                 cellElement.classList.add('cell');
-                cellElement.dataset.i = i;
-                cellElement.dataset.j = j;
+                cellElement.dataset.i = i.toString();
+                cellElement.dataset.j = j.toString();
                 this.cellsElements[i][j] = cellElement;
                 gridElement.appendChild(cellElement);
             }
         }
         this.gridElement = gridElement;
         const gridContainerElement = this.rootElement.querySelector('.grid-container');
-        gridContainerElement.replaceChildren();
-        gridContainerElement.appendChild(gridElement);
+        if (gridContainerElement) {
+            gridContainerElement.replaceChildren();
+            gridContainerElement.appendChild(gridElement);
+        }
         this.rootElement.setAttribute('game-status', "playing");
     }
 
-    onCellLeftClick(callback) {
+    onCellLeftClick(callback: (i: number, j: number) => void) {
         this.gridElement.addEventListener("click", (e) => { this.delegateToController(e, callback) })
     }
 
-    delegateToController(e, callback) {
-        if (!e.target.classList.contains('cell')) return;
-        const i = parseInt(e.target.dataset.i);
-        const j = parseInt(e.target.dataset.j);
+    delegateToController(e: Event, callback: (i: number, j: number) => void) {
+        const target = e.target as HTMLElement;
+        if (!target.classList.contains('cell')) return;
+        const i = parseInt(target.dataset.i!);
+        const j = parseInt(target.dataset.j!);
         callback(i, j);
     }
-    onCellRightClick(callback) {
+    onCellRightClick(callback: (i: number, j: number) => void) {
         this.gridElement.addEventListener("contextmenu", (e) => { e.preventDefault(); this.delegateToController(e, callback) })
         this.gridElement.addEventListener("pointerdown", (e) => {
             let isActive = true;
@@ -191,25 +208,26 @@ class GameView {
                 }
             }, 1000)
             this.gridElement.addEventListener("pointerup", () => {
-                console.log('here');
-
                 isActive = false;
             })
 
         })
 
     }
-    renderCells(updatedCells) {
+    renderCells(updatedCells: Cell[]) {
         for (const cell of updatedCells) {
             this.renderCell(cell);
         }
     }
 
-    renderStats(stats) {
-        this.rootElement.querySelector(".remaining-flags-count").textContent = stats.remainingFlagsCount;
+    renderStats(stats: Stats) {
+        const statsElement = this.rootElement.querySelector(".remaining-flags-count");
+        if (statsElement) {
+            statsElement.textContent = stats.remainingFlagsCount.toString();
+        }
     }
 
-    renderCell(cellData) {
+    renderCell(cellData: Cell) {
         const i = cellData.i;
         const j = cellData.j;
         const cellElement = this.cellsElements[i][j];
@@ -219,7 +237,7 @@ class GameView {
                 cellElement.textContent = "💣";
             }
             else {
-                cellElement.textContent = cellData.neighborBombs;
+                cellElement.textContent = cellData.neighborBombs.toString();
             }
         }
         else if (cellData.isFlagged) {
@@ -228,7 +246,7 @@ class GameView {
         else cellElement.textContent = "";
     }
 
-    async playBombRevealAnimation(bombsArray) {
+    async playBombRevealAnimation(bombsArray: Cell[]) {
         for (const cell of bombsArray) {
             const i = cell.i;
             const j = cell.j;
@@ -236,19 +254,24 @@ class GameView {
             await sleep(100);
         }
     }
-    updateGameStatus(status) {
+    updateGameStatus(status: GameStatus) {
         const message = this.rootElement.querySelector('.message');
-        if (status == "won") {
-            message.textContent = "Congrats you won 🥳";
-        } else {
-            message.textContent = "mmmm... maybe try again 🔁";
+        if (message) {
+            if (status == "won") {
+                message.textContent = "Congrats you won 🥳";
+            } else {
+                message.textContent = "mmmm... maybe try again 🔁";
+            }
         }
         this.rootElement.setAttribute('game-status', status);
     }
 }
 
 class GameController {
-    constructor(gridModel, view) {
+    gridModel: Grid;
+    view: GameView;
+
+    constructor(gridModel: Grid, view: GameView) {
         this.gridModel = gridModel;
         this.view = view;
 
@@ -260,19 +283,19 @@ class GameController {
 
     }
 
-    handleReveal(i, j) {
+    handleReveal(i: number, j: number) {
         if (this.gridModel.status != "playing") return;
         const updatedCells = this.gridModel.revealCell(i, j);
         this.decideNextMove(updatedCells);
     }
 
-    handleToggleflag(i, j) {
+    handleToggleflag(i: number, j: number) {
         if (this.gridModel.status != "playing") return;
         const updatedCells = this.gridModel.toggleFlagCell(i, j);
         this.decideNextMove(updatedCells);
     }
 
-    decideNextMove(updatedCells) {
+    decideNextMove(updatedCells: Cell[]) {
         this.syncCellsWithView(updatedCells);
         this.syncStatsWithView();
         if (this.gridModel.status === "won") {
@@ -295,7 +318,7 @@ class GameController {
         this.view.updateGameStatus('won');
     }
 
-    syncCellsWithView(updatedCells) {
+    syncCellsWithView(updatedCells: Cell[]) {
         this.view.renderCells(updatedCells);
     }
 }
@@ -303,30 +326,39 @@ class GameController {
 
 
 class GameManager {
+    app: HTMLElement;
+    restartButton: HTMLElement;
+    levelSelector: HTMLSelectElement;
+    size = 10;
 
-    constructor(app) {
+    constructor(app: HTMLElement) {
         this.app = app;
-        this.restartButton = app.querySelector('.restart-button');
-        this.levelSelector = app.querySelector("select");
+        this.restartButton = app.querySelector('.restart-button') as HTMLElement;
+        this.levelSelector = app.querySelector("select") as HTMLSelectElement;
         this.restartButton.onclick = () => { this.start() }
-        this.levelSelector.onchange = (e) => { this.setSize(e.target.value); this.start() }
-        this.setSize(10);
+        this.levelSelector.onchange = (e: Event) => { 
+            const target = e.target as HTMLSelectElement;
+            this.setSize(target.value); 
+            this.start(); 
+        }
+        this.setSize("10");
         this.start();
     }
 
-    setSize(size) {
-        size = parseInt(size);
-        this.size = size;
+    setSize(size: string) {
+        this.size = parseInt(size);
     }
     start() {
-        this.app.style.setProperty("--side", this.size);
+        this.app.style.setProperty("--side", this.size.toString());
         const grid = new Grid(this.size);
         const gameView = new GameView(this.app);
-        const gameController = new GameController(grid, gameView);
+        new GameController(grid, gameView);
     }
 }
 
 
-const app = document.getElementById('app');
+const appElement = document.getElementById('app');
 
-new GameManager(app);
+if (appElement) {
+    new GameManager(appElement);
+}

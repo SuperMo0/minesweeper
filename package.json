@@ -1,0 +1,25 @@
+{
+  "name": "minesweaper",
+  "version": "1.0.0",
+  "description": "Minesweeper game built to practice the MVC pattern.",
+  "main": "script.js",
+  "scripts": {
+    "build": "tsc",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SuperMo0/mine-sweeper.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/SuperMo0/mine-sweeper/issues"
+  },
+  "homepage": "https://github.com/SuperMo0/mine-sweeper#readme",
+  "devDependencies": {
+    "typescript": "^6.0.3"
+  }
+}
