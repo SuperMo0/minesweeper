@@ -1,4 +1,6 @@
 
+import { AudioPlayer } from './audio.js';
+
 function sleep(ms: number) {
     return new Promise<void>(resolve => setTimeout(resolve, ms));
 }
@@ -362,10 +364,12 @@ class GameView extends Observable {
 class GameController {
     gridModel: Grid;
     view: GameView;
+    audio: AudioPlayer;
 
-    constructor(gridModel: Grid, view: GameView) {
+    constructor(gridModel: Grid, view: GameView, audio: AudioPlayer) {
         this.gridModel = gridModel;
         this.view = view;
+        this.audio = audio;
 
         this.view.buildGrid(gridModel.sideLength);
 
@@ -377,12 +381,14 @@ class GameController {
 
     handleReveal(i: number, j: number) {
         if (this.gridModel.status != "playing") return;
+        this.audio.playClick();
         const updatedCells = this.gridModel.revealCell(i, j);
         this.decideNextMove(updatedCells);
     }
 
     handleToggleflag(i: number, j: number) {
         if (this.gridModel.status != "playing") return;
+        this.audio.playFlag();
         const updatedCells = this.gridModel.toggleFlagCell(i, j);
         this.decideNextMove(updatedCells);
     }
@@ -403,6 +409,7 @@ class GameController {
     }
     async handleGameLost() {
         const bombsPositions = this.gridModel.getBombsPositions();
+        this.audio.playBomb();
         await this.view.playBombRevealAnimation(bombsPositions);
         this.view.updateGameStatus('lost');
     }
@@ -421,18 +428,29 @@ class GameManager {
     app: HTMLElement;
     restartButton: HTMLElement;
     levelSelector: HTMLSelectElement;
+    muteButton: HTMLButtonElement;
+    audioPlayer: AudioPlayer;
     size = 10;
 
     constructor(app: HTMLElement) {
         this.app = app;
         this.restartButton = app.querySelector('.restart-button') as HTMLElement;
         this.levelSelector = app.querySelector("select") as HTMLSelectElement;
+        this.muteButton = document.getElementById("mute-button") as HTMLButtonElement;
+        this.audioPlayer = new AudioPlayer();
+
         this.restartButton.onclick = () => { this.start() }
         this.levelSelector.onchange = (e) => {
             const target = e.target as HTMLSelectElement;
             this.setSize(target.value);
             this.start();
         }
+
+        this.muteButton.onclick = () => {
+            const isMuted = this.audioPlayer.toggleMute();
+            this.muteButton.textContent = isMuted ? '🔇' : '🔊';
+        }
+
         this.setSize("10");
         this.start();
     }
@@ -444,7 +462,7 @@ class GameManager {
         this.app.style.setProperty("--side", this.size.toString());
         const grid = new Grid(this.size);
         const gameView = new GameView(this.app);
-        new GameController(grid, gameView);
+        new GameController(grid, gameView, this.audioPlayer);
     }
 }
 

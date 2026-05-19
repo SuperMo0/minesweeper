@@ -1,4 +1,4 @@
-"use strict";
+import { AudioPlayer } from './audio.js';
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -226,7 +226,7 @@ class GameView extends Observable {
             hideWidget();
         };
         this.gridElement.addEventListener("click", (e) => {
-            e.stopPropagation(); // Avoid triggering document click immediately
+            e.stopPropagation();
             const target = e.target;
             if (!target.classList.contains('cell') || target.classList.contains('revealed')) {
                 hideWidget();
@@ -316,9 +316,11 @@ class GameView extends Observable {
 class GameController {
     gridModel;
     view;
-    constructor(gridModel, view) {
+    audio;
+    constructor(gridModel, view, audio) {
         this.gridModel = gridModel;
         this.view = view;
+        this.audio = audio;
         this.view.buildGrid(gridModel.sideLength);
         this.view.on('leftClick', this.handleReveal.bind(this));
         this.view.on('rightClick', this.handleToggleflag.bind(this));
@@ -327,12 +329,14 @@ class GameController {
     handleReveal(i, j) {
         if (this.gridModel.status != "playing")
             return;
+        this.audio.playClick();
         const updatedCells = this.gridModel.revealCell(i, j);
         this.decideNextMove(updatedCells);
     }
     handleToggleflag(i, j) {
         if (this.gridModel.status != "playing")
             return;
+        this.audio.playFlag();
         const updatedCells = this.gridModel.toggleFlagCell(i, j);
         this.decideNextMove(updatedCells);
     }
@@ -351,6 +355,7 @@ class GameController {
     }
     async handleGameLost() {
         const bombsPositions = this.gridModel.getBombsPositions();
+        this.audio.playBomb();
         await this.view.playBombRevealAnimation(bombsPositions);
         this.view.updateGameStatus('lost');
     }
@@ -365,16 +370,24 @@ class GameManager {
     app;
     restartButton;
     levelSelector;
+    muteButton;
+    audioPlayer;
     size = 10;
     constructor(app) {
         this.app = app;
         this.restartButton = app.querySelector('.restart-button');
         this.levelSelector = app.querySelector("select");
+        this.muteButton = document.getElementById("mute-button");
+        this.audioPlayer = new AudioPlayer();
         this.restartButton.onclick = () => { this.start(); };
         this.levelSelector.onchange = (e) => {
             const target = e.target;
             this.setSize(target.value);
             this.start();
+        };
+        this.muteButton.onclick = () => {
+            const isMuted = this.audioPlayer.toggleMute();
+            this.muteButton.textContent = isMuted ? '🔇' : '🔊';
         };
         this.setSize("10");
         this.start();
@@ -386,7 +399,7 @@ class GameManager {
         this.app.style.setProperty("--side", this.size.toString());
         const grid = new Grid(this.size);
         const gameView = new GameView(this.app);
-        new GameController(grid, gameView);
+        new GameController(grid, gameView, this.audioPlayer);
     }
 }
 const appElement = document.getElementById('app');
