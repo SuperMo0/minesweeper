@@ -6,6 +6,22 @@ function initializeGrid(height, width) {
     let z = new Array(height).fill(null).map(() => new Array(width).fill(null));
     return z;
 }
+class Observable {
+    listeners = {};
+    on(event, callback) {
+        if (!this.listeners[event]) {
+            this.listeners[event] = [];
+        }
+        this.listeners[event].push(callback);
+    }
+    emit(event, ...args) {
+        if (this.listeners[event]) {
+            for (const cb of this.listeners[event]) {
+                cb(...args);
+            }
+        }
+    }
+}
 class Cell {
     i;
     j;
@@ -36,20 +52,34 @@ class Grid {
     flaggedCount = 0;
     bombsCount = 0;
     revealedCount = 0;
+    isInitialized = false;
     constructor(sideLength) {
         this.sideLength = sideLength;
+        this.bombsCount = sideLength === 10 ? 10 : sideLength === 12 ? 20 : 40;
         this.cellsTable = initializeGrid(this.sideLength, this.sideLength);
         this.initiateGrid();
     }
     initiateGrid() {
         for (let i = 0; i < this.sideLength; i++) {
             for (let j = 0; j < this.sideLength; j++) {
-                const isBomb = Math.random() < 0.1; // todo: we should fix the number of bombs for each level
-                const crntCell = new Cell(isBomb, i, j);
-                this.bombsCount += isBomb ? 1 : 0;
-                this.cellsTable[i][j] = crntCell;
+                this.cellsTable[i][j] = new Cell(false, i, j);
             }
         }
+    }
+    placeBombs(excludeI, excludeJ) {
+        const validCells = [];
+        for (let i = 0; i < this.sideLength; i++) {
+            for (let j = 0; j < this.sideLength; j++) {
+                if (Math.abs(i - excludeI) > 1 || Math.abs(j - excludeJ) > 1) {
+                    validCells.push(this.cellsTable[i][j]);
+                }
+            }
+        }
+        validCells.sort(() => Math.random() - 0.5);
+        for (let k = 0; k < this.bombsCount; k++) {
+            validCells[k].isBomb = true;
+        }
+        this.isInitialized = true;
     }
     toggleFlagCell(i, j) {
         const currentCell = this.cellsTable[i][j];
@@ -58,6 +88,9 @@ class Grid {
         return [currentCell];
     }
     revealCell(i, j) {
+        if (!this.isInitialized) {
+            this.placeBombs(i, j);
+        }
         const currentCell = this.cellsTable[i][j];
         if (currentCell.isFlagged || currentCell.isRevealed) {
             return [];
@@ -133,11 +166,12 @@ class Grid {
         };
     }
 }
-class GameView {
+class GameView extends Observable {
     gridElement;
     cellsElements;
     rootElement;
     constructor(rootElement) {
+        super();
         this.rootElement = rootElement;
     }
     buildGrid(sideLength) {
@@ -161,9 +195,28 @@ class GameView {
             gridContainerElement.appendChild(gridElement);
         }
         this.rootElement.setAttribute('game-status', "playing");
+        this.bindEvents();
     }
-    onCellLeftClick(callback) {
-        this.gridElement.addEventListener("click", (e) => { this.delegateToController(e, callback); });
+    bindEvents() {
+        this.gridElement.addEventListener("click", (e) => {
+            this.delegateToController(e, (i, j) => this.emit('leftClick', i, j));
+        });
+        this.gridElement.addEventListener("contextmenu", (e) => {
+            e.preventDefault();
+            this.delegateToController(e, (i, j) => this.emit('rightClick', i, j));
+        });
+        this.gridElement.addEventListener("pointerdown", (e) => {
+            let isActive = true;
+            setTimeout(() => {
+                if (isActive) {
+                    e.preventDefault();
+                    this.delegateToController(e, (i, j) => this.emit('longRightClick', i, j));
+                }
+            }, 1000);
+            this.gridElement.addEventListener("pointerup", () => {
+                isActive = false;
+            }, { once: true });
+        });
     }
     delegateToController(e, callback) {
         const target = e.target;
@@ -172,21 +225,6 @@ class GameView {
         const i = parseInt(target.dataset.i);
         const j = parseInt(target.dataset.j);
         callback(i, j);
-    }
-    onCellRightClick(callback) {
-        this.gridElement.addEventListener("contextmenu", (e) => { e.preventDefault(); this.delegateToController(e, callback); });
-        this.gridElement.addEventListener("pointerdown", (e) => {
-            let isActive = true;
-            setTimeout(() => {
-                if (isActive) {
-                    e.preventDefault();
-                    this.delegateToController(e, callback);
-                }
-            }, 1000);
-            this.gridElement.addEventListener("pointerup", () => {
-                isActive = false;
-            });
-        });
     }
     renderCells(updatedCells) {
         for (const cell of updatedCells) {
@@ -246,8 +284,8 @@ class GameController {
         this.gridModel = gridModel;
         this.view = view;
         this.view.buildGrid(gridModel.sideLength);
-        this.view.onCellLeftClick(this.handleReveal.bind(this));
-        this.view.onCellRightClick(this.handleToggleflag.bind(this));
+        this.view.on('leftClick', this.handleReveal.bind(this));
+        this.view.on('rightClick', this.handleToggleflag.bind(this));
         this.syncStatsWithView();
     }
     handleReveal(i, j) {
