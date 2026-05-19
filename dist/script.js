@@ -197,25 +197,61 @@ class GameView extends Observable {
         this.rootElement.setAttribute('game-status', "playing");
         this.bindEvents();
     }
+    createSelectionWidget() {
+        const template = document.getElementById('selection-widget-template');
+        const clone = template.content.cloneNode(true);
+        const widget = clone.querySelector('.selection-widget');
+        const revealBtn = clone.querySelector('.reveal-btn');
+        const flagBtn = clone.querySelector('.flag-btn');
+        this.gridElement.appendChild(clone);
+        return { widget, revealBtn, flagBtn };
+    }
     bindEvents() {
+        const { widget, revealBtn, flagBtn } = this.createSelectionWidget();
+        let currentTarget = null;
+        const hideWidget = () => {
+            widget.style.display = 'none';
+            currentTarget = null;
+        };
+        revealBtn.onclick = (e) => {
+            e.stopPropagation();
+            if (currentTarget)
+                this.emit('leftClick', currentTarget.i, currentTarget.j);
+            hideWidget();
+        };
+        flagBtn.onclick = (e) => {
+            e.stopPropagation();
+            if (currentTarget)
+                this.emit('rightClick', currentTarget.i, currentTarget.j);
+            hideWidget();
+        };
         this.gridElement.addEventListener("click", (e) => {
-            this.delegateToController(e, (i, j) => this.emit('leftClick', i, j));
+            e.stopPropagation(); // Avoid triggering document click immediately
+            const target = e.target;
+            if (!target.classList.contains('cell') || target.classList.contains('revealed')) {
+                hideWidget();
+                return;
+            }
+            const i = parseInt(target.dataset.i);
+            const j = parseInt(target.dataset.j);
+            currentTarget = { i, j };
+            const rect = target.getBoundingClientRect();
+            widget.style.display = 'flex';
+            widget.style.left = `${rect.left}px`;
+            widget.style.top = `${rect.top - widget.offsetHeight - 5}px`;
         });
+        const onDocClick = () => {
+            if (!this.gridElement.isConnected) {
+                document.removeEventListener("click", onDocClick);
+                return;
+            }
+            hideWidget();
+        };
+        document.addEventListener("click", onDocClick);
         this.gridElement.addEventListener("contextmenu", (e) => {
             e.preventDefault();
+            hideWidget();
             this.delegateToController(e, (i, j) => this.emit('rightClick', i, j));
-        });
-        this.gridElement.addEventListener("pointerdown", (e) => {
-            let isActive = true;
-            setTimeout(() => {
-                if (isActive) {
-                    e.preventDefault();
-                    this.delegateToController(e, (i, j) => this.emit('longRightClick', i, j));
-                }
-            }, 1000);
-            this.gridElement.addEventListener("pointerup", () => {
-                isActive = false;
-            }, { once: true });
         });
     }
     delegateToController(e, callback) {
